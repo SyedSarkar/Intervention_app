@@ -4,8 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import re
 import time
-#from transformers import pipeline
-from transformers.pipelines import pipeline
+from transformers import pipeline
 
 STOPWORDS = {
     'a', 'an', 'the', 'and', 'or', 'but', 'on', 'in', 'with', 'to', 'from', 'by',
@@ -157,7 +156,7 @@ if st.session_state.phase == 1:
             st.session_state.responses.append(entry)
             safe_id = re.sub(r'[^\w\-]', '_', st.session_state.user_id)
             pd.DataFrame(st.session_state.responses).to_csv(f"results/{safe_id}.csv", index=False)
-            st.rerun()
+            # Removed st.rerun() here
 
         st.text_input("Type a related uplifting phrase (up to 3 words):", key=f"input_{st.session_state.step}", on_change=handle_input)
 
@@ -223,7 +222,7 @@ elif st.session_state.phase == 2:
             st.session_state.responses.append(entry)
             safe_id = re.sub(r'[^\w\-]', '_', st.session_state.user_id)
             pd.DataFrame(st.session_state.responses).to_csv(f"results/{safe_id}.csv", index=False)
-            st.rerun()
+            # Removed st.rerun() here
 
         st.text_input("Respond with a positive phrase:", key=f"input_s2_{st.session_state.step}", on_change=handle_input_2)
 
