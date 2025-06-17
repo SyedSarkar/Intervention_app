@@ -4,8 +4,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import re
 import time
-#from transformers import pipeline
 from transformers.pipelines import pipeline
+import string
+import nltk
+from nltk.corpus import words
+
+# Download NLTK words if not already downloaded
+nltk.download('words')
+english_vocab = set(w.lower() for w in words.words())
 
 STOPWORDS = {
     'a', 'an', 'the', 'and', 'or', 'but', 'on', 'in', 'with', 'to', 'from', 'by',
@@ -14,15 +20,14 @@ STOPWORDS = {
     'be', 'am', 'are', 'was', 'were', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did'
 }
 
-import string
-
 def looks_like_gibberish(word):
     return (
         len(word) < 2 or
         not word.isalpha() or
         re.fullmatch(r"(.)\1{2,}", word) or
         re.search(r'[aeiou]{3,}', word) or
-        re.search(r'[zxcvbnm]{4,}', word)
+        re.search(r'[zxcvbnm]{4,}', word) or
+        word not in english_vocab
     )
 
 def is_valid_response(response, cue_word):
@@ -45,6 +50,12 @@ def format_cue_word(cue):
         {cue}
     </div>
     """
+
+def get_safe_progress(current, total):
+    """Ensure progress bar value stays within [0.0, 1.0]"""
+    if total == 0:
+        return 0.0
+    return min(max(current / total, 0.0), 1.0)
 
 @st.cache_resource
 def load_model():
@@ -104,7 +115,7 @@ if st.session_state.phase == 0:
         st.rerun()
 
 if st.session_state.phase == 1:
-    st.progress(st.session_state.step / len(cue_words))
+    st.progress(get_safe_progress(st.session_state.step, len(cue_words)))
     st.markdown(f"**Points**: `{st.session_state.score}` | **Responses**: `{len(st.session_state.used_texts)}`")
 
     if st.session_state.step < len(cue_words):
@@ -157,7 +168,6 @@ if st.session_state.phase == 1:
             st.session_state.responses.append(entry)
             safe_id = re.sub(r'[^\w\-]', '_', st.session_state.user_id)
             pd.DataFrame(st.session_state.responses).to_csv(f"results/{safe_id}.csv", index=False)
-            # Removed st.rerun() here
 
         st.text_input("Type a related uplifting phrase (up to 3 words):", key=f"input_{st.session_state.step}", on_change=handle_input)
 
@@ -169,7 +179,7 @@ if st.session_state.phase == 1:
             st.rerun()
 
 elif st.session_state.phase == 2:
-    st.progress(st.session_state.step / len(sentences))
+    st.progress(get_safe_progress(st.session_state.step, len(sentences)))
     st.markdown(f"**Points**: `{st.session_state.score}` | **Responses**: `{len(st.session_state.used_texts)}`")
 
     if st.session_state.step < len(sentences):
@@ -223,38 +233,40 @@ elif st.session_state.phase == 2:
             st.session_state.responses.append(entry)
             safe_id = re.sub(r'[^\w\-]', '_', st.session_state.user_id)
             pd.DataFrame(st.session_state.responses).to_csv(f"results/{safe_id}.csv", index=False)
-            # Removed st.rerun() here
 
         st.text_input("Respond with a positive phrase:", key=f"input_s2_{st.session_state.step}", on_change=handle_input_2)
 
     else:
-        st.balloons()
-        st.success("Congratulations! 🎉 Phase 2 Complete!")
-        st.markdown(f"**Final Score:** `{st.session_state.score}`")
-        df = pd.DataFrame(st.session_state.responses)
-        st.dataframe(df)
+        st.session_state.step = 0
+        st.session_state.phase = 3
+        st.rerun()
 
-        st.download_button("📥 Download Your Results", data=df.to_csv(index=False).encode("utf-8"), file_name=f"{st.session_state.user_id}_results.csv")
+elif st.session_state.phase == 3:
+    st.balloons()
+    st.success("🎉 Task Complete!")
+    st.markdown(f"**Final Score:** `{st.session_state.score}`")
+    df = pd.DataFrame(st.session_state.responses)
+    st.dataframe(df)
 
-        st.subheader("📊 Sentiment Confidence Over Time")
+    with st.expander("📊 Analytics Dashboard"):
+        st.subheader("Confidence Over Time")
         df["step"] = range(1, len(df) + 1)
-        fig, ax = plt.subplots()
-        df.plot(x='step', y='confidence', kind='line', ax=ax, color='green', marker='o')
-        ax.set_title("Sentiment Confidence")
-        ax.set_ylabel("Confidence")
-        st.pyplot(fig)
+        min_step, max_step = st.slider("Select step range:", int(df["step"].min()), int(df["step"].max()), (int(df["step"].min()), int(df["step"].max())))
+        filtered_df = df[(df["step"] >= min_step) & (df["step"] <= max_step)]
 
-        st.subheader("📈 Score Over Time")
-        fig, ax = plt.subplots()
-        df["cumulative_score"] = df.groupby("phase")["score"].cumsum()
-        df.plot(x='step', y='cumulative_score', kind='line', ax=ax, color='blue', marker='o')
-        ax.set_title("Cumulative Score")
-        ax.set_ylabel("Cumulative Score")
-        st.pyplot(fig)
+        fig1, ax1 = plt.subplots()
+        filtered_df.plot(x="step", y="confidence", ax=ax1, color="green", marker='o')
+        st.pyplot(fig1)
 
-        st.markdown("Thank you for participating! Your responses will help us understand positive emotional associations better.")
-        st.markdown("If you want to restart the task, click the button below.")
-        if st.button("🔁 Restart"):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+        st.subheader("Score Over Time")
+        filtered_df["cumulative"] = filtered_df["score"].cumsum()
+        fig2, ax2 = plt.subplots()
+        filtered_df.plot(x="step", y="cumulative", ax=ax2, color="blue", marker='o')
+        st.pyplot(fig2)
+
+    st.download_button("Download Results", df.to_csv(index=False).encode(), file_name=f"{st.session_state.user_id}_results.csv")
+
+    if st.button("🔁 Restart"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
