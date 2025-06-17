@@ -1,0 +1,7 @@
+streamlit
+pandas
+matplotlib
+nltk
+torch
+transformers
+sentence-transformers
