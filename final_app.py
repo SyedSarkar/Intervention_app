@@ -4,7 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import re
 import time
-from transformers import pipeline
+#from transformers import pipeline
+from transformers.pipelines import pipeline
 
 STOPWORDS = {
     'a', 'an', 'the', 'and', 'or', 'but', 'on', 'in', 'with', 'to', 'from', 'by',
